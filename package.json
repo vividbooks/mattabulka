@@ -1,0 +1,38 @@
+{
+  "name": "ma_nastenka",
+  "version": "1.0.0",
+  "description": "Freeform collaborative-style board prototype",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "type": "module",
+  "browserslist": [
+    "defaults",
+    "Chrome >= 61",
+    "Firefox >= 67",
+    "Safari >= 12",
+    "iOS >= 12",
+    "Edge >= 79"
+  ],
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "lucide-react": "^1.11.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-legacy": "^8.0.1",
+    "@vitejs/plugin-react": "^6.0.1",
+    "terser": "^5.47.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.10"
+  }
+}
