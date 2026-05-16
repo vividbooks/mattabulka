@@ -672,9 +672,13 @@ function submitCircleHitRadiusPx(): number {
 const DOMINO_EXAMPLE_WIDTH = 304;
 const DOMINO_EXAMPLE_HEIGHT = 328;
 const DOMINO_EXAMPLE_GAP_X = 220;
-const MARBLE_BAG_EXAMPLE_WIDTH = 336;
-const MARBLE_BAG_EXAMPLE_HEIGHT = 330;
-const MARBLE_BAG_EXAMPLE_GAP_X = 220;
+const MARBLE_BAG_EXAMPLE_WIDTH = 510;
+const MARBLE_BAG_EXAMPLE_HEIGHT = 430;
+const MARBLE_BAG_EXAMPLE_GAP_X = 240;
+const MARBLE_BAG_BALL_URL =
+  'https://jjpiguuubvmiobmixwgh.supabase.co/storage/v1/object/public/Admin%20math/kulicka_zelena.svg';
+const MARBLE_BAG_YELLOW_URL =
+  'https://jjpiguuubvmiobmixwgh.supabase.co/storage/v1/object/public/Admin%20math/pitlik_zluty.svg';
 
 /** Interaktivní dlaždice z knihovny — stejné poměry jako minihra (595×298). */
 const DOMINO_TILE_WIDTH = 240;
@@ -3628,61 +3632,181 @@ function MarbleBagExampleSvg({
   const status = marbleBagExampleStatus(object);
   const ex = object.example;
   const sub = arithmeticSubmitButtonCenter(object);
-  const bag: MarbleBagObject = {
-    kind: 'marbleBag',
-    id: `${object.id}-bag`,
-    x: object.x + 112,
-    y: object.y + 82,
-    width: 116,
-    height: 122,
-    items: object.items,
-    accentColor: '#1e1b4b',
-  };
-  const tableY = object.y + 72;
+  const ox = object.x;
+  const oy = object.y;
+  const titleY = oy + 52;
+  const table = { x: ox + 56, y: oy + 118, width: 398, height: 196 };
+  const bag = { x: ox + 252, y: oy + 58, width: 230, height: 164 };
+  const titleBallX = Math.min(ox + object.width - 88, ox + 206 + ex.total * 13);
+  const answerValue = marbleBagAnswerValue(object);
+  const tablePositions = [
+    { x: 42, y: 42, s: 38 },
+    { x: 148, y: 88, s: 38 },
+    { x: 260, y: 44, s: 34 },
+    { x: 202, y: 94, s: 36 },
+    { x: 68, y: 156, s: 38 },
+    { x: 214, y: 118, s: 34 },
+    { x: 118, y: 138, s: 34 },
+    { x: 286, y: 118, s: 34 },
+    { x: 172, y: 44, s: 34 },
+  ];
+  const answerItems = object.items.slice(-12);
   return (
     <g
       className={`arithmetic-example-block arithmetic-example-card marble-bag-example-card arithmetic-example-card--${status}${
         selected ? ' is-active' : ''
       }`}
     >
-      <rect className="arithmetic-example-card-bg" x={object.x} y={object.y} width={object.width} height={object.height} rx={22} />
-      <text className="arithmetic-example-index" x={object.x + 24} y={object.y + 32} dominantBaseline="middle">
+      <defs>
+        <filter id={`marble-bag-task-shadow-${object.id}`} x="-16%" y="-22%" width="132%" height="150%">
+          <feDropShadow dx={0} dy={10} stdDeviation={10} floodColor="#4b321f" floodOpacity={0.18} />
+        </filter>
+        <filter id={`marble-bag-task-soft-${object.id}`} x="-60%" y="-60%" width="220%" height="220%">
+          <feDropShadow dx={0} dy={4} stdDeviation={3} floodColor="#3b2818" floodOpacity={0.2} />
+        </filter>
+      </defs>
+      <rect
+        className="arithmetic-example-card-bg"
+        x={ox}
+        y={oy}
+        width={object.width}
+        height={object.height}
+        rx={28}
+        fill="#fff8cd"
+      />
+      <text className="arithmetic-example-index" x={ox + 24} y={oy + 30} dominantBaseline="middle">
         {ex.index}
       </text>
-      <text className="arithmetic-example-expression" x={object.x + object.width / 2} y={object.y + 38} textAnchor="middle">
-        Mám {ex.total}. Venku je {ex.onTable}. Kolik je v pytlíčku?
+      <text
+        x={ox + 166}
+        y={titleY}
+        fill="#03036a"
+        fontSize={42}
+        fontWeight={900}
+        textAnchor="end"
+        dominantBaseline="middle"
+        style={{ userSelect: 'none', pointerEvents: 'none' }}
+      >
+        MÁM
       </text>
       <g pointerEvents="none">
+        {Array.from({ length: ex.total }).map((_, index) => (
+          <path
+            key={index}
+            d={`M ${ox + 184 + index * 13} ${oy + 18} Q ${ox + 181 + index * 13} ${oy + 52} ${ox + 184 + index * 13} ${oy + 84}`}
+            stroke="#03036a"
+            strokeWidth={3}
+            strokeLinecap="round"
+            fill="none"
+          />
+        ))}
+      </g>
+      <image href={MARBLE_BAG_BALL_URL} x={titleBallX} y={oy + 26} width={48} height={48} preserveAspectRatio="xMidYMid meet" />
+
+      <rect
+        x={table.x}
+        y={table.y + 10}
+        width={table.width}
+        height={table.height}
+        rx={22}
+        fill="#755838"
+        opacity={0.9}
+        filter={`url(#marble-bag-task-shadow-${object.id})`}
+      />
+      <rect
+        x={table.x}
+        y={table.y}
+        width={table.width}
+        height={table.height}
+        rx={22}
+        fill="#fff8ef"
+        filter={`url(#marble-bag-task-shadow-${object.id})`}
+      />
+      <image
+        href={MARBLE_BAG_YELLOW_URL}
+        x={bag.x}
+        y={bag.y}
+        width={bag.width}
+        height={bag.height}
+        preserveAspectRatio="xMidYMid meet"
+        pointerEvents="none"
+      />
+      <g pointerEvents="none">
         {Array.from({ length: ex.onTable }, (_, index) => {
-          const cols = Math.min(10, ex.onTable);
-          const gap = 22;
-          const col = index % cols;
-          const row = Math.floor(index / cols);
-          const rowWidth = (Math.min(cols, ex.onTable - row * cols) - 1) * gap;
-          const x = object.x + object.width / 2 - rowWidth / 2 + col * gap;
-          const y = tableY + row * 22;
-          return <circle key={index} cx={x} cy={y} r={9} fill="#44b968" stroke="#1e1b4b" strokeWidth={1.2} />;
+          const p = tablePositions[index % tablePositions.length];
+          const row = Math.floor(index / tablePositions.length);
+          return (
+            <image
+              key={index}
+              href={MARBLE_BAG_BALL_URL}
+              x={table.x + p.x + row * 18}
+              y={table.y + p.y + row * 10}
+              width={p.s}
+              height={p.s}
+              preserveAspectRatio="xMidYMid meet"
+              filter={`url(#marble-bag-task-soft-${object.id})`}
+            />
+          );
         })}
       </g>
-      <MarbleBagSvg bag={bag} selected={false} />
+      <g pointerEvents="none">
+        {answerItems.map((item, index) => {
+          const col = index % 5;
+          const row = Math.floor(index / 5);
+          const x = bag.x + 62 + col * 25;
+          const y = bag.y + 88 + row * 24;
+          if (item.kind === 'number') {
+            return (
+              <g key={item.id} transform={`translate(${x} ${y})`}>
+                <circle r={16} fill="#fffdf4" stroke="#03036a" strokeWidth={2} />
+                <text y={6} fill="#03036a" fontSize={18} fontWeight={900} textAnchor="middle">
+                  {item.label}
+                </text>
+              </g>
+            );
+          }
+          return (
+            <image
+              key={item.id}
+              href={MARBLE_BAG_BALL_URL}
+              x={x - 14}
+              y={y - 14}
+              width={28}
+              height={28}
+              preserveAspectRatio="xMidYMid meet"
+            />
+          );
+        })}
+      </g>
       <rect
         className="arithmetic-example-answer-zone"
-        x={object.x + 44}
-        y={object.y + 222}
-        width={object.width - 88}
-        height={52}
-        rx={18}
+        x={ox + 246}
+        y={oy + 348}
+        width={140}
+        height={62}
+        rx={16}
       />
       <text
-        x={object.x + object.width / 2}
-        y={object.y + 253}
+        x={ox + 232}
+        y={oy + 382}
         textAnchor="middle"
-        fill="#1e1b4b"
-        fontSize={14}
+        fill="#03036a"
+        fontSize={27}
         fontWeight={800}
         style={{ userSelect: 'none', pointerEvents: 'none' }}
       >
-        {ex.answerMode === 'number' ? 'přetáhni číslo do pytlíčku' : 'přetáhni kuličky do pytlíčku'}
+        V PYTLÍKU JE:
+      </text>
+      <text
+        x={ox + 302}
+        y={oy + 388}
+        textAnchor="middle"
+        fill="#03036a"
+        fontSize={38}
+        fontWeight={900}
+        style={{ userSelect: 'none', pointerEvents: 'none' }}
+      >
+        {answerValue ?? ''}
       </text>
       <circle className="arithmetic-example-submit-circle" cx={sub.x} cy={sub.y} r={ARITHMETIC_SUBMIT_R} />
       <text className="arithmetic-example-submit-check" x={sub.x} y={sub.y + 1} dominantBaseline="middle" textAnchor="middle">
