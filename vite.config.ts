@@ -2,7 +2,8 @@ import legacy from '@vitejs/plugin-legacy';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
+  base: mode === 'github-pages' ? '/mattabulka/' : '/',
   plugins: [
     react(),
     legacy({
@@ -19,4 +20,4 @@ export default defineConfig({
       renderLegacyChunks: true,
     }),
   ],
-});
+}));
