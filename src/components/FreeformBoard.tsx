@@ -78,6 +78,7 @@ import { BoardFileMenu } from './BoardFileMenu';
 import { BoardCloudModal } from './BoardCloudModal';
 import type { StickerItem } from '../lib/stickerLibrary';
 import { peekBuildTileDragPayload } from '../lib/buildTileDragPayload';
+import { MARBLE_BAG_ITEM_DRAG } from '../lib/marbleBagDragMime';
 import { peekMathGlyphDragPayload } from '../lib/mathGlyphDragPayload';
 import {
   readMathGlyphStripStyleFromStorage,
@@ -723,7 +724,6 @@ const MARBLE_BAG_DEFAULT_H = 220;
 /** Barva „zásobních“ kuliček u zadání (MÁM / stolek) — shodná s paletou úlohy. */
 const MARBLE_BAG_STOCK_MARBLE_COLOR = '#44b968';
 const MARBLE_BAG_DRAG = 'application/x-marble-bag';
-const MARBLE_BAG_ITEM_DRAG = 'application/x-marble-bag-item';
 
 /** ease-out cubic pro odklánění půlek po řezu */
 function easeBuildTileSplitOut(t: number) {

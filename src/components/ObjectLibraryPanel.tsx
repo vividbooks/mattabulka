@@ -39,6 +39,7 @@ import {
   BRUSH_COLOR_PRESETS,
   HIGHLIGHTER_COLOR_PRESETS,
 } from '../lib/drawingToolColors';
+import { MARBLE_BAG_ITEM_DRAG } from '../lib/marbleBagDragMime';
 import { setMathGlyphDragPayload } from '../lib/mathGlyphDragPayload';
 import { KULICKA_ZELENA_SVG } from '../lib/countingGameMarbleAssets';
 import { numberLineBoardGameFigureUrl } from '../lib/numberLineBoardGameFigures';
