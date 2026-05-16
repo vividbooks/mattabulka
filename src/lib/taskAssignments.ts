@@ -8,6 +8,7 @@ export type SequenceDifficulty = 'easy' | 'medium' | 'hard';
 export type SequenceItemKind = 'number' | 'tile' | 'shape';
 export type SequencePatternKind = 'AB' | 'ABC' | 'ABCD';
 export type MarbleBagAnswerMode = 'marbles' | 'number';
+export type MarbleBagTotalDisplayMode = 'lines' | 'number';
 
 export interface ArithmeticTaskSettings {
   type: 'arithmetic';
@@ -33,7 +34,11 @@ export interface SequenceTaskSettings {
 
 export interface MarbleBagTaskSettings {
   type: 'marbleBag';
-  total: number;
+  /** Backcompat for older shared payloads created before totalMin/totalMax. */
+  total?: number;
+  totalMin: number;
+  totalMax: number;
+  totalDisplayMode: MarbleBagTotalDisplayMode;
   answerMode: MarbleBagAnswerMode;
   exampleCount: number;
   seed: number;
@@ -79,6 +84,7 @@ export interface MarbleBagExample {
   total: number;
   onTable: number;
   expectedInBag: number;
+  totalDisplayMode: MarbleBagTotalDisplayMode;
   answerMode: MarbleBagAnswerMode;
 }
 
@@ -143,7 +149,10 @@ export interface EncodedDominoAssignment {
 export interface EncodedMarbleBagAssignment {
   v: 1;
   t: 'marbleBag';
-  total: number;
+  total?: number;
+  min?: number;
+  max?: number;
+  display?: MarbleBagTotalDisplayMode;
   mode: MarbleBagAnswerMode;
   c: number;
   seed: number;
@@ -220,7 +229,9 @@ export function defaultDominoTaskSettings(): DominoTaskSettings {
 export function defaultMarbleBagTaskSettings(): MarbleBagTaskSettings {
   return {
     type: 'marbleBag',
-    total: 10,
+    totalMin: 3,
+    totalMax: 10,
+    totalDisplayMode: 'lines',
     answerMode: 'marbles',
     exampleCount: 6,
     seed: createTaskSeed(),
@@ -308,10 +319,15 @@ export function normalizeSequenceTaskSettings(settings: SequenceTaskSettings): S
 }
 
 export function normalizeMarbleBagTaskSettings(settings: MarbleBagTaskSettings): MarbleBagTaskSettings {
-  const total = Math.min(20, Math.max(2, normalizeInt(settings.total, 10)));
+  const legacyTotal = settings.total === undefined ? undefined : normalizeInt(settings.total, 10);
+  let totalMin = Math.min(20, Math.max(2, normalizeInt(settings.totalMin ?? legacyTotal ?? 3, 3)));
+  let totalMax = Math.min(20, Math.max(2, normalizeInt(settings.totalMax ?? legacyTotal ?? 10, 10)));
+  if (totalMax < totalMin) [totalMin, totalMax] = [totalMax, totalMin];
   return {
     type: 'marbleBag',
-    total,
+    totalMin,
+    totalMax,
+    totalDisplayMode: settings.totalDisplayMode === 'number' ? 'number' : 'lines',
     answerMode: settings.answerMode === 'number' ? 'number' : 'marbles',
     exampleCount: Math.min(16, Math.max(1, normalizeInt(settings.exampleCount, 6))),
     seed: normalizeInt(settings.seed, createTaskSeed()),
@@ -621,17 +637,19 @@ export function generateMarbleBagExamples(settings: MarbleBagTaskSettings): Marb
   const out: MarbleBagExample[] = [];
   let previousOnTable = -1;
   for (let i = 0; i < normalized.exampleCount; i += 1) {
-    let onTable = randomInt(rand, 1, normalized.total - 1);
-    if (normalized.total > 3 && onTable === previousOnTable) {
-      onTable = (onTable % (normalized.total - 1)) + 1;
+    const total = randomInt(rand, normalized.totalMin, normalized.totalMax);
+    let onTable = randomInt(rand, 1, total - 1);
+    if (total > 3 && onTable === previousOnTable) {
+      onTable = (onTable % (total - 1)) + 1;
     }
     previousOnTable = onTable;
     out.push({
       id: `bag-${normalized.seed}-${i + 1}`,
       index: i + 1,
-      total: normalized.total,
+      total,
       onTable,
-      expectedInBag: normalized.total - onTable,
+      expectedInBag: total - onTable,
+      totalDisplayMode: normalized.totalDisplayMode,
       answerMode: normalized.answerMode,
     });
   }
@@ -666,7 +684,9 @@ export function encodeAssignmentToUrlPayload(settings: TaskAssignmentSettings): 
     payload = {
       v: 1,
       t: 'marbleBag',
-      total: normalized.total,
+      min: normalized.totalMin,
+      max: normalized.totalMax,
+      display: normalized.totalDisplayMode,
       mode: normalized.answerMode,
       c: normalized.exampleCount,
       seed: normalized.seed,
@@ -719,7 +739,10 @@ export function decodeAssignmentFromUrlPayload(payload: string): TaskAssignmentS
     if (decoded.t === 'marbleBag') {
       return normalizeMarbleBagTaskSettings({
         type: 'marbleBag',
-        total: decoded.total ?? 10,
+        total: decoded.total,
+        totalMin: decoded.min ?? decoded.total ?? 3,
+        totalMax: decoded.max ?? decoded.total ?? 10,
+        totalDisplayMode: decoded.display === 'number' ? 'number' : 'lines',
         answerMode: decoded.mode === 'number' ? 'number' : 'marbles',
         exampleCount: decoded.c ?? 6,
         seed: decoded.seed ?? createTaskSeed(),

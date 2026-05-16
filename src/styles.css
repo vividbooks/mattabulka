@@ -3910,9 +3910,11 @@ button {
 }
 
 .marble-bag-item-palette {
-  display: grid;
-  grid-template-columns: 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
+  justify-content: center;
   margin-top: 12px;
 }
 
@@ -3929,11 +3931,31 @@ button {
   border-radius: 14px;
 }
 
-.marble-bag-item-pick-dot {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #1e1b4b;
+.marble-bag-item-pick.marble-bag-item-pick--glyph-key {
+  gap: 0;
+  width: 56px;
+  min-width: 56px;
+  height: 56px;
+  padding: 0;
+  justify-content: center;
   border-radius: 999px;
+  font-size: 0;
+  background: rgba(148, 163, 184, 0.14);
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.marble-bag-item-pick.marble-bag-item-pick--glyph-key:hover {
+  background: rgba(148, 163, 184, 0.24);
+  border-color: rgba(226, 232, 240, 0.32);
+}
+
+.marble-bag-item-pick.marble-bag-item-pick--glyph-key:active {
+  cursor: grabbing;
+}
+
+.marble-bag-item-pick.marble-bag-item-pick--glyph-key .marble-bag-marble-key-img {
+  width: 32px;
+  height: 32px;
 }
 
 /* Skutečná CSS 3D kostka ve SVG foreignObject */
@@ -7185,29 +7207,118 @@ button {
   padding: 10px 14px;
 }
 
-.marble-bag-choice-button {
+.marble-bag-task-marble-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  max-width: 16rem;
+}
+
+/* Kulička v pásu úlohy: stejné assety jako minihra (kulicka_zelena) */
+.pinned-sticker-button.pinned-math-glyph.marble-bag-marble-key {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 58px;
-  height: 58px;
-  border: 1px solid rgba(30, 27, 75, 0.16);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
-  cursor: grab;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
 }
 
-.marble-bag-choice-button:active {
-  cursor: grabbing;
+.pinned-sticker-button.pinned-math-glyph.marble-bag-marble-key:hover {
+  color: transparent;
 }
 
-.marble-bag-choice-button__dot {
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  border: 2px solid rgba(30, 27, 75, 0.22);
-  box-shadow: inset -5px -6px 9px rgba(15, 23, 42, 0.18), inset 5px 5px 7px rgba(255, 255, 255, 0.55);
+.app-shell.library-dock-side
+  .library-bottom-panel__inline-strip--math
+  .marble-bag-task-marble-stack
+  .pinned-sticker-button.pinned-math-glyph.marble-bag-marble-key {
+  width: 62px;
+  min-width: 62px;
+  height: 62px;
+}
+
+.app-shell.student-task-mode .marble-bag-task-marble-stack .pinned-sticker-button.pinned-math-glyph.marble-bag-marble-key {
+  width: 56px;
+  height: 56px;
+}
+
+.marble-bag-marble-key-img {
+  display: block;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+}
+
+.app-shell.library-dock-side
+  .library-bottom-panel__inline-strip--math
+  .pinned-sticker-button.pinned-math-glyph.marble-bag-marble-key
+  .marble-bag-marble-key-img {
+  width: 52px;
+  height: 52px;
+}
+
+.app-shell.student-task-mode
+  .marble-bag-task-marble-stack
+  .pinned-sticker-button.pinned-math-glyph.marble-bag-marble-key
+  .marble-bag-marble-key-img {
+  width: 46px;
+  height: 46px;
+}
+
+.marble-bag-task-math-hint {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  align-self: center;
+  padding: 0 2px;
+}
+
+.marble-bag-task-math-hint--instruction {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  max-width: 15rem;
+  white-space: normal;
+  line-height: 1.25;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  color: #0f172a;
+  text-align: center;
+}
+
+/* Spodní / boční panel je tmavý — základní nápověda musí být světlá (bez spoléhání na .is-dark). */
+.library-bottom-panel .marble-bag-task-math-hint--instruction {
+  color: #f8fafc;
+  text-shadow: 0 1px 3px rgba(15, 23, 42, 0.9);
+}
+
+.app-shell--light-ui .library-bottom-panel .marble-bag-task-math-hint--instruction {
+  color: #0f172a;
+  text-shadow: none;
+}
+
+.marble-bag-task-math-hint__line {
+  display: block;
+}
+
+.app-shell.is-dark .marble-bag-task-math-hint--instruction {
+  color: rgba(248, 250, 252, 0.95);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+
+/* Úloha Zjisti (pytlíček): stejné písmo Visby jako u příkladů / matematického pásu */
+.marble-bag-example-block text {
+  font-family: var(--font-math-strip), system-ui, sans-serif;
 }
 
 .selection-outline {

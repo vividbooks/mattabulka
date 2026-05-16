@@ -17,7 +17,6 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
-  CircleDot,
   Grid3x3,
   Keyboard,
   ListChecks,
@@ -41,6 +40,7 @@ import {
   HIGHLIGHTER_COLOR_PRESETS,
 } from '../lib/drawingToolColors';
 import { setMathGlyphDragPayload } from '../lib/mathGlyphDragPayload';
+import { KULICKA_ZELENA_SVG } from '../lib/countingGameMarbleAssets';
 import { numberLineBoardGameFigureUrl } from '../lib/numberLineBoardGameFigures';
 import { useStickerCatalog, type StickerCategory, type StickerItem } from '../lib/stickerLibrary';
 import {
@@ -51,6 +51,7 @@ import {
   defaultMarbleBagTaskSettings,
   defaultSequenceTaskSettings,
   type MarbleBagAnswerMode,
+  type MarbleBagTotalDisplayMode,
   type MarbleBagTaskSettings,
   type ArithmeticDifficulty,
   type ArithmeticExampleVariety,
@@ -82,7 +83,7 @@ import {
 export type ObjectLibraryPanelMode = 'closed' | 'catalog' | 'tasks' | 'drawing';
 type SideColumnMode = 'tool-strip' | 'catalog' | 'tasks' | 'drawing' | 'teacher-task' | 'student-task';
 
-type LibraryView = 'home' | 'tiles' | 'numberLines' | 'beadCounter' | 'diceTray' | 'marbleBag' | 'tasks' | `sticker:${string}`;
+type LibraryView = 'home' | 'tiles' | 'numberLines' | 'beadCounter' | 'diceTray' | 'tasks' | `sticker:${string}`;
 type TileVariant = 'stacked' | 'flat';
 type BeadCounterVariant = 'ten' | 'twenty';
 type TasksDetailKind = 'sequence' | 'arithmetic' | 'domino' | 'marbleBag';
@@ -97,8 +98,24 @@ export type PinnedStripBoardSelection =
 
 const MATH_GLYPH_DRAG = 'application/x-math-glyph';
 const SEQUENCE_CHOICE_DRAG = 'application/x-sequence-choice';
-const MARBLE_BAG_DRAG = 'application/x-marble-bag';
-const MARBLE_BAG_ITEM_DRAG = 'application/x-marble-bag-item';
+
+/** Jedna dostupná kulička (dříve zelená) — barva pro přetahování i vykreslení. */
+const MARBLE_BAG_MARBLE_COLOR = '#44b968';
+
+/** Stejný asset jako minihra Zjišťujeme / Vividbooks (`kulicka_zelena.svg`). */
+function MarbleBagMarbleKeyGlyph({ className }: { className?: string }) {
+  return (
+    <img
+      src={KULICKA_ZELENA_SVG}
+      alt=""
+      width={44}
+      height={44}
+      draggable={false}
+      className={className ? `marble-bag-marble-key-img ${className}` : 'marble-bag-marble-key-img'}
+      aria-hidden
+    />
+  );
+}
 
 function armMathGlyphDragTransfer(event: React.DragEvent, label: string) {
   event.dataTransfer.setData(MATH_GLYPH_DRAG, JSON.stringify({ label }));
@@ -153,7 +170,6 @@ interface ObjectLibraryPanelProps {
   onInsertNumberLine: (start: number, end: number, withFigure?: boolean) => void;
   onInsertBeadCounter: (variant: BeadCounterVariant) => void;
   onInsertDiceTray: () => void;
-  onInsertMarbleBag: () => void;
   onInsertDominoTile: () => void;
   onInsertSpatialTilingBoard: () => void;
   onCreateArithmeticAssignment: (settings: ArithmeticTaskSettings) => void | Promise<void>;
@@ -519,7 +535,6 @@ function getLibraryViewLabel(view: LibraryView, selectedStickerCategory: Sticker
   if (view === 'numberLines') return 'Číselné osy';
   if (view === 'beadCounter') return 'Korálkové počítadlo';
   if (view === 'diceTray') return 'Hrací kostky';
-  if (view === 'marbleBag') return 'Zjisti';
   if (view === 'tasks') return 'Úkoly a příklady';
   if (view.startsWith('sticker:')) return selectedStickerCategory?.label ?? null;
   return null;
@@ -584,7 +599,6 @@ export function ObjectLibraryPanel({
   onInsertNumberLine,
   onInsertBeadCounter,
   onInsertDiceTray,
-  onInsertMarbleBag,
   onInsertDominoTile,
   onInsertSpatialTilingBoard,
   onCreateArithmeticAssignment,
@@ -1079,15 +1093,10 @@ export function ObjectLibraryPanel({
     activeTaskSettings &&
     (activeTaskSettings.type === 'arithmetic' ||
       activeTaskSettings.type === 'domino' ||
-      (activeTaskSettings.type === 'marbleBag' && activeTaskSettings.answerMode === 'number'));
+      activeTaskSettings.type === 'marbleBag');
+  const mathStripNumbersOnly = activeTaskSettings?.type === 'marbleBag';
   const showMathGlyphStrip =
     (pinnedMathGlyphs || taskNeedsMathGlyphStrip) && !embeddedMachineToolbar && !embeddedSpatialTilingToolbar;
-  const showMarbleBagChoiceStrip =
-    taskModeActive &&
-    activeTaskSettings?.type === 'marbleBag' &&
-    activeTaskSettings.answerMode === 'marbles' &&
-    !embeddedMachineToolbar &&
-    !embeddedSpatialTilingToolbar;
   const showSequenceChoiceStrip = taskModeActive && !studentTaskMode && activeSequenceChoices && activeSequenceChoices.length > 0;
   /** Spodní dok: nástroje kreslení přímo v liště místo pásu z knihovny (FigJam-style). */
   const showDrawingBottomStrip =
@@ -1102,7 +1111,6 @@ export function ObjectLibraryPanel({
     if (!sideDockNotNarrow) return false;
     if (panelMode !== 'closed') return false;
     if (showSequenceChoiceStrip) return false;
-    if (showMarbleBagChoiceStrip) return false;
     if (showMathGlyphStrip) return false;
     if (embeddedSpatialTilingToolbar) return false;
     if (embeddedMachineToolbar) return false;
@@ -1115,7 +1123,6 @@ export function ObjectLibraryPanel({
     sideDockNotNarrow,
     panelMode,
     showSequenceChoiceStrip,
-    showMarbleBagChoiceStrip,
     showMathGlyphStrip,
     embeddedSpatialTilingToolbar,
     embeddedMachineToolbar,
@@ -1179,36 +1186,7 @@ export function ObjectLibraryPanel({
 
   return (
     <>
-      {showMarbleBagChoiceStrip ? (
-        <div
-          className="library-bottom-panel library-bottom-panel--inline marble-bag-choice-panel"
-          aria-label="Kuličky do pytlíčku"
-        >
-          {embeddedToolPalette ? (
-            <div className="library-bottom-tool-palette" aria-label="Nástroje nástěnky">
-              {embeddedToolPalette}
-            </div>
-          ) : null}
-          <div className="library-bottom-panel__inline-strip marble-bag-choice-strip" aria-label="Kuličky do pytlíčku">
-            {['#44b968', '#facc15', '#60a5fa', '#fb7185', '#a78bfa'].map((color, index) => (
-              <button
-                type="button"
-                key={color}
-                className="marble-bag-choice-button"
-                draggable
-                onDragStart={(event) => {
-                  event.dataTransfer.setData(MARBLE_BAG_ITEM_DRAG, JSON.stringify({ color }));
-                  event.dataTransfer.effectAllowed = 'copy';
-                }}
-                title="Kulička do pytlíčku"
-              >
-                <span className="marble-bag-choice-button__dot" style={{ backgroundColor: color }} aria-hidden />
-                <span className="sr-only">Kulička {index + 1}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : showSequenceChoiceStrip ? (
+      {showSequenceChoiceStrip ? (
         <div
           className="library-bottom-panel library-bottom-panel--inline sequence-choice-panel"
           aria-label="Výběr prvku do řady"
@@ -1481,6 +1459,37 @@ export function ObjectLibraryPanel({
                   <span className="pinned-math-strip-sep" aria-hidden />
                 </>
               ) : null}
+              {taskModeActive && activeTaskSettings?.type === 'marbleBag' && panelMode === 'tasks' ? (
+                <>
+                  <div className="marble-bag-task-marble-stack">
+                    <span className="marble-bag-task-math-hint marble-bag-task-math-hint--instruction">
+                      <span className="marble-bag-task-math-hint__line">PŘETÁHNI KULIČKU DO PYTLÍKU</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="pinned-sticker-button pinned-math-glyph marble-bag-marble-key"
+                      draggable
+                      title="Přetáhnout kuličku do pytlíčku"
+                      onDragStart={(event) => {
+                        event.dataTransfer.setData(
+                          MARBLE_BAG_ITEM_DRAG,
+                          JSON.stringify({ kind: 'marble', color: MARBLE_BAG_MARBLE_COLOR }),
+                        );
+                        event.dataTransfer.effectAllowed = 'copy';
+                      }}
+                    >
+                      <MarbleBagMarbleKeyGlyph />
+                      <span className="sr-only">
+                        Přetáhni kuličku do pytlíku, nebo zadej číslo klávesami níže.
+                      </span>
+                    </button>
+                    <span className="marble-bag-task-math-hint marble-bag-task-math-hint--instruction">
+                      <span className="marble-bag-task-math-hint__line">NEBO ZADEJ ČÍSLO</span>
+                    </span>
+                  </div>
+                  <span className="pinned-math-strip-sep" aria-hidden />
+                </>
+              ) : null}
               {libraryDock === 'side' ? (
                 <>
                   <span className="pinned-math-calculator-group pinned-math-calculator-digits" aria-label="Čísla">
@@ -1505,28 +1514,30 @@ export function ObjectLibraryPanel({
                       </button>
                     ))}
                   </span>
-                  <span className="pinned-math-calculator-group pinned-math-calculator-ops" aria-label="Znaménka">
-                    {MATH_STRIP_OPS.map((op) => (
-                      <button
-                        type="button"
-                        key={op}
-                        className={`pinned-sticker-button pinned-math-glyph is-op${
-                          pinnedStripBoardSelection?.kind === 'mathGlyph' && pinnedStripBoardSelection.label === op
-                            ? ' is-board-selected'
-                            : ''
-                        }`}
-                        title={`Znaménko ${op}`}
-                        draggable={Boolean(onArmMathGlyph)}
-                        onDragStart={(e) => {
-                          armMathGlyphDragTransfer(e, op);
-                        }}
-                        onDragEnd={clearMathGlyphDragTransfer}
-                        onClick={() => onArmMathGlyph?.(op)}
-                      >
-                        {op}
-                      </button>
-                    ))}
-                  </span>
+                  {!mathStripNumbersOnly ? (
+                    <span className="pinned-math-calculator-group pinned-math-calculator-ops" aria-label="Znaménka">
+                      {MATH_STRIP_OPS.map((op) => (
+                        <button
+                          type="button"
+                          key={op}
+                          className={`pinned-sticker-button pinned-math-glyph is-op${
+                            pinnedStripBoardSelection?.kind === 'mathGlyph' && pinnedStripBoardSelection.label === op
+                              ? ' is-board-selected'
+                              : ''
+                          }`}
+                          title={`Znaménko ${op}`}
+                          draggable={Boolean(onArmMathGlyph)}
+                          onDragStart={(e) => {
+                            armMathGlyphDragTransfer(e, op);
+                          }}
+                          onDragEnd={clearMathGlyphDragTransfer}
+                          onClick={() => onArmMathGlyph?.(op)}
+                        >
+                          {op}
+                        </button>
+                      ))}
+                    </span>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -1550,27 +1561,31 @@ export function ObjectLibraryPanel({
                   {digit}
                 </button>
               ))}
-              <span className="pinned-math-strip-sep" aria-hidden />
-              {MATH_STRIP_OPS.map((op) => (
-                <button
-                  type="button"
-                  key={op}
-                  className={`pinned-sticker-button pinned-math-glyph is-op${
-                    pinnedStripBoardSelection?.kind === 'mathGlyph' && pinnedStripBoardSelection.label === op
-                      ? ' is-board-selected'
-                      : ''
-                  }`}
-                  title={`Znaménko ${op}`}
-                  draggable={Boolean(onArmMathGlyph)}
-                  onDragStart={(e) => {
-                    armMathGlyphDragTransfer(e, op);
-                  }}
-                  onDragEnd={clearMathGlyphDragTransfer}
-                  onClick={() => onArmMathGlyph?.(op)}
-                >
-                  {op}
-                </button>
-              ))}
+              {!mathStripNumbersOnly ? (
+                <>
+                  <span className="pinned-math-strip-sep" aria-hidden />
+                  {MATH_STRIP_OPS.map((op) => (
+                    <button
+                      type="button"
+                      key={op}
+                      className={`pinned-sticker-button pinned-math-glyph is-op${
+                        pinnedStripBoardSelection?.kind === 'mathGlyph' && pinnedStripBoardSelection.label === op
+                          ? ' is-board-selected'
+                          : ''
+                      }`}
+                      title={`Znaménko ${op}`}
+                      draggable={Boolean(onArmMathGlyph)}
+                      onDragStart={(e) => {
+                        armMathGlyphDragTransfer(e, op);
+                      }}
+                      onDragEnd={clearMathGlyphDragTransfer}
+                      onClick={() => onArmMathGlyph?.(op)}
+                    >
+                      {op}
+                    </button>
+                  ))}
+                </>
+              ) : null}
                 </>
               )}
             </div>
@@ -1891,12 +1906,11 @@ export function ObjectLibraryPanel({
               >
                 <span className="library-category-preview library-marble-bag-preview" aria-hidden="true">
                   <span className="library-marble-bag-preview__bag" />
-                  <span className="library-marble-bag-preview__marble" />
-                  <span className="library-marble-bag-preview__marble" />
+                  <span className="library-marble-bag-preview__marble is-green" />
                 </span>
                 <span className="library-interactive-tile-label">
                   <strong>Zjisti</strong>
-                  <small>pytlíček, kuličky nebo číslo</small>
+                  <small>pytlíček, kulička nebo číslo</small>
                 </span>
               </button>
             </div>
@@ -2236,28 +2250,6 @@ export function ObjectLibraryPanel({
                 <span className="library-interactive-tile-label">
                   <strong>Dlaždice na mřížce</strong>
                   <small>tvary jako v Pokládání dlaždic</small>
-                </span>
-              </button>
-            ) : null}
-            {libraryFilterVisibility.interactive.has('marbleBag') ? (
-              <button
-                className="library-category-card library-category-card--interactive library-interactive-tile"
-                type="button"
-                onClick={() => {
-                  setLibraryView('marbleBag');
-                  setActiveStickerRowId(null);
-                  setActiveTileVariant(null);
-                  onPinnedMathGlyphsChange(false);
-                }}
-              >
-                <span className="library-category-preview library-marble-bag-preview" aria-hidden="true">
-                  <span className="library-marble-bag-preview__bag" />
-                  <span className="library-marble-bag-preview__marble is-green" />
-                  <span className="library-marble-bag-preview__marble is-yellow" />
-                </span>
-                <span className="library-interactive-tile-label">
-                  <strong>Zjisti</strong>
-                  <small>pytlíček pro kuličky a čísla</small>
                 </span>
               </button>
             ) : null}
@@ -2805,22 +2797,68 @@ export function ObjectLibraryPanel({
               <small>Žák vidí celkem a část venku, do pytlíčku doplní chybějící počet.</small>
             </div>
 
-            <label className="task-config-field">
-              <span>Celkem</span>
-              <input
-                type="number"
-                min={2}
-                max={20}
-                value={marbleBagSettings.total}
-                onChange={(event) =>
-                  setMarbleBagSettings((current) => ({
-                    ...current,
-                    total: Number(event.target.value),
-                    seed: createTaskSeed(),
-                  }))
-                }
-              />
-            </label>
+            <div className="task-config-grid">
+              <label className="task-config-field">
+                <span>Celkem od</span>
+                <input
+                  type="number"
+                  min={2}
+                  max={20}
+                  value={marbleBagSettings.totalMin}
+                  onChange={(event) =>
+                    setMarbleBagSettings((current) => ({
+                      ...current,
+                      totalMin: Number(event.target.value),
+                      seed: createTaskSeed(),
+                    }))
+                  }
+                />
+              </label>
+              <label className="task-config-field">
+                <span>Celkem do</span>
+                <input
+                  type="number"
+                  min={2}
+                  max={20}
+                  value={marbleBagSettings.totalMax}
+                  onChange={(event) =>
+                    setMarbleBagSettings((current) => ({
+                      ...current,
+                      totalMax: Number(event.target.value),
+                      seed: createTaskSeed(),
+                    }))
+                  }
+                />
+              </label>
+            </div>
+
+            <div className="task-config-field">
+              <span>Zobrazit celkem</span>
+              <div className="task-operation-pills" role="group" aria-label="Zobrazení celkového počtu">
+                {(
+                  [
+                    { v: 'lines' as MarbleBagTotalDisplayMode, label: 'Čárky' },
+                    { v: 'number' as MarbleBagTotalDisplayMode, label: 'Číslo' },
+                  ] as const
+                ).map(({ v, label }) => (
+                  <button
+                    key={v}
+                    type="button"
+                    className={marbleBagSettings.totalDisplayMode === v ? 'is-active' : ''}
+                    aria-pressed={marbleBagSettings.totalDisplayMode === v}
+                    onClick={() =>
+                      setMarbleBagSettings((current) => ({
+                        ...current,
+                        totalDisplayMode: v,
+                        seed: createTaskSeed(),
+                      }))
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="task-config-field">
               <span>Doplňování</span>
@@ -3019,61 +3057,6 @@ export function ObjectLibraryPanel({
               Po výběru: v dokumentovém panelu Hoďit, + Kostka a typ D4–D20.
             </span>
           </button>
-        </div>
-      )}
-
-      {libraryView === 'marbleBag' && (
-        <div className="number-line-library-block">
-          {renderBackHeader()}
-          <div className="sticker-library-heading">
-            <span>Zjisti</span>
-            <span>Pytlíček</span>
-          </div>
-          <button
-            className="marble-bag-library-card"
-            type="button"
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData(MARBLE_BAG_DRAG, JSON.stringify({ type: 'marbleBag' }));
-              event.dataTransfer.effectAllowed = 'copy';
-            }}
-            onClick={() => onInsertMarbleBag()}
-          >
-            <div className="marble-bag-library-card-preview" aria-hidden="true">
-              <span className="marble-bag-library-card-bag" />
-              <span className="marble-bag-library-card-marble is-green" />
-              <span className="marble-bag-library-card-marble is-yellow" />
-            </div>
-            <span className="dice-tray-library-card-title">Vložit pytlíček</span>
-            <span className="dice-tray-library-card-hint">
-              Do pytlíčku přetáhni kuličky z knihovny nebo čísla ze spodního pásu.
-            </span>
-          </button>
-          <div className="marble-bag-item-palette" aria-label="Kuličky do pytlíčku">
-            {[
-              { color: '#44b968', label: 'zelená' },
-              { color: '#f6d64f', label: 'žlutá' },
-            ].map((item) => (
-              <button
-                key={item.color}
-                type="button"
-                draggable
-                className="marble-bag-item-pick"
-                title={`Přetáhnout kuličku (${item.label})`}
-                onDragStart={(event) => {
-                  event.dataTransfer.setData(
-                    MARBLE_BAG_ITEM_DRAG,
-                    JSON.stringify({ kind: 'marble', color: item.color }),
-                  );
-                  event.dataTransfer.effectAllowed = 'copy';
-                }}
-              >
-                <CircleDot size={17} strokeWidth={2.2} aria-hidden />
-                <span className="marble-bag-item-pick-dot" style={{ backgroundColor: item.color }} />
-                <span>Kulička</span>
-              </button>
-            ))}
-          </div>
         </div>
       )}
 

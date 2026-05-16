@@ -68,6 +68,7 @@ import {
 import { SpatialTilingBoardSvg, SpatialTilingPatternOverlaySvg } from './SpatialTilingBoardSvg';
 import { DiceTraySvg } from './DiceTraySvg';
 import { MarbleBagSvg, type MarbleBagItemView } from './MarbleBagSvg';
+import { MarbleBagYellowTaskSvg } from './MarbleBagYellowTaskSvg';
 import { SpatialTilingLibraryToolbar } from './SpatialTilingLibraryToolbar';
 import { BoardScrollbars } from './BoardScrollbars';
 import { BoardStickyNoteSvg } from './BoardStickyNoteSvg';
@@ -132,6 +133,7 @@ import {
   type SequenceTaskSettings,
   type TaskAssignmentSettings,
 } from '../lib/taskAssignments';
+import { kulickaSvgUrlForHex } from '../lib/countingGameMarbleAssets';
 import { useSupabaseAuth } from '../contexts/SupabaseAuthContext';
 import { saveBoardDocumentToCloud } from '../lib/boardCloud';
 import {
@@ -602,6 +604,14 @@ type BoardAction =
       startWorld: Point;
       moved: boolean;
     }
+  | {
+      type: 'marbleBagItemDrag';
+      exampleId: string;
+      itemId: string;
+      startWorld: Point;
+      originalExample: MarbleBagExampleObject;
+      moved: boolean;
+    }
   | { type: 'drawShape'; startWorld: Point };
 
 const EMPTY_ACTION: BoardAction = { type: 'idle' };
@@ -675,12 +685,34 @@ const DOMINO_EXAMPLE_GAP_X = 220;
 const MARBLE_BAG_EXAMPLE_WIDTH = 720;
 const MARBLE_BAG_EXAMPLE_HEIGHT = 480;
 const MARBLE_BAG_EXAMPLE_GAP_X = 240;
-const MARBLE_BAG_BALL_URL =
-  'https://jjpiguuubvmiobmixwgh.supabase.co/storage/v1/object/public/Admin%20math/kulicka_zelena.svg';
-const MARBLE_BAG_YELLOW_URL =
-  'https://jjpiguuubvmiobmixwgh.supabase.co/storage/v1/object/public/Admin%20math/pitlik_zluty.svg';
+/** Kulička jako ve minihře Zjišťujeme — raster/SVG z úložiště (kulicka_zelena / kulicka_zluta). */
+function MarbleBagTaskMarbleDisc({
+  cx,
+  cy,
+  mr,
+  color,
+  scale,
+}: {
+  cx: number;
+  cy: number;
+  mr: number;
+  color: string;
+  scale: number;
+}) {
+  const d = 2 * (mr + 3 * scale);
+  return (
+    <image
+      href={kulickaSvgUrlForHex(color)}
+      x={cx - d / 2}
+      y={cy - d / 2}
+      width={d}
+      height={d}
+      preserveAspectRatio="xMidYMid meet"
+      pointerEvents="none"
+    />
+  );
+}
 
-/** Interaktivní dlaždice z knihovny — stejné poměry jako minihra (595×298). */
 const DOMINO_TILE_WIDTH = 240;
 const DOMINO_TILE_HEIGHT = Math.round((DOMINO_TILE_WIDTH * VIVID_DOMINO_VIEW_H) / VIVID_DOMINO_VIEW_W);
 const MAX_DICE_TRAY_DICE = 8;
@@ -688,6 +720,8 @@ const DICE_TRAY_DEFAULT_W = 320;
 const DICE_TRAY_DEFAULT_H = 156;
 const MARBLE_BAG_DEFAULT_W = 250;
 const MARBLE_BAG_DEFAULT_H = 220;
+/** Barva „zásobních“ kuliček u zadání (MÁM / stolek) — shodná s paletou úlohy. */
+const MARBLE_BAG_STOCK_MARBLE_COLOR = '#44b968';
 const MARBLE_BAG_DRAG = 'application/x-marble-bag';
 const MARBLE_BAG_ITEM_DRAG = 'application/x-marble-bag-item';
 
@@ -1688,6 +1722,118 @@ function arithmeticSubmitButtonCenter(example: { x: number; y: number; width: nu
   };
 }
 
+function marbleBagExampleGeometry(example: MarbleBagExampleObject) {
+  const scale = Math.min(example.width / 1200, example.height / 800);
+  const left = example.x + (example.width - 1200 * scale) / 2;
+  const top = example.y + (example.height - 800 * scale) / 2;
+  const sx = (value: number) => left + value * scale;
+  const gy = (value: number) => top + value * scale;
+  return { scale, sx, gy };
+}
+
+function marbleBagAnswerRect(example: MarbleBagExampleObject) {
+  const { scale, sx, gy } = marbleBagExampleGeometry(example);
+  const sw = (v: number) => v * scale;
+  return {
+    x: sx(528),
+    y: gy(676),
+    width: sw(176),
+    height: sw(80),
+  };
+}
+
+function marbleBagSubmitButtonCenter(example: MarbleBagExampleObject) {
+  const { sx, gy } = marbleBagExampleGeometry(example);
+  return { x: sx(930), y: gy(718) };
+}
+
+function marbleBagItemDefaultPosition(index: number) {
+  const col = index % 4;
+  const row = Math.floor(index / 4);
+  return {
+    x: 650 + col * 46 + row * 12,
+    y: 255 + row * 38 + (col % 2) * 8,
+  };
+}
+
+function marbleBagMarbleOrdinal(example: MarbleBagExampleObject, item: MarbleBagItem) {
+  const ord = example.items.filter((i) => i.kind === 'marble').findIndex((i) => i.id === item.id);
+  return ord < 0 ? 0 : ord;
+}
+
+function marbleBagMarbleLayoutPosition(example: MarbleBagExampleObject, item: MarbleBagItem & { kind: 'marble' }) {
+  if (item.x !== undefined && item.y !== undefined) return { x: item.x, y: item.y };
+  return marbleBagItemDefaultPosition(marbleBagMarbleOrdinal(example, item));
+}
+
+function marbleBagItemHitAt(example: MarbleBagExampleObject, point: Point) {
+  const { scale, sx, gy } = marbleBagExampleGeometry(example);
+  const hitR = 52 * scale;
+  for (let index = example.items.length - 1; index >= 0; index -= 1) {
+    const item = example.items[index];
+    if (item.kind !== 'marble') continue;
+    const p = marbleBagMarbleLayoutPosition(example, item);
+    if (distance(point, { x: sx(p.x), y: gy(p.y) }) <= hitR) return item;
+  }
+  return null;
+}
+
+/** Oblast žlutého pytlíku ve „design“ souřadnicích (1200×800 stejně jako MarbleBagYellowTaskSvg). */
+const MARBLE_BAG_PYTLIK_DESIGN = { x: 450, y: 40, w: 576, h: 384 };
+
+/** Aktivní drop — kulička ze spodní lišty je nad žlutým pytlíkem (stejná oblast jako `MarbleBagYellowTaskSvg`). */
+function marbleBagYellowPytlikHitRect(example: MarbleBagExampleObject) {
+  const { scale, sx, gy } = marbleBagExampleGeometry(example);
+  const sw = (value: number) => value * scale;
+  const pad = 8 * scale;
+  const d = MARBLE_BAG_PYTLIK_DESIGN;
+  return {
+    x: sx(d.x) - pad,
+    y: gy(d.y) - pad,
+    width: sw(d.w) + 2 * pad,
+    height: sw(d.h) + 2 * pad,
+  };
+}
+
+function worldPointOverMarbleBagYellowPytlik(example: MarbleBagExampleObject, world: Point): boolean {
+  return pointInRect(world, marbleBagYellowPytlikHitRect(example));
+}
+
+/** Velikost bílého kolečka s × u kuličky (násobek `marbleBagExampleGeometry().scale`). */
+const MARBLE_BAG_DELETE_CHIP_CIRCLE_R = 17;
+/** Glyph × uvnitř kolečka. */
+const MARBLE_BAG_DELETE_CHIP_FONT = 22;
+/** Poloměr zásahu prstem v px obrazovky (musí ladit s vizuálem výše). */
+const MARBLE_BAG_DELETE_CHIP_HIT_RADIUS_PX = 24;
+
+function isMarbleCenterInPytlikDesign(p: { x: number; y: number }) {
+  const pad = 8;
+  return (
+    p.x >= MARBLE_BAG_PYTLIK_DESIGN.x - pad &&
+    p.y >= MARBLE_BAG_PYTLIK_DESIGN.y - pad &&
+    p.x <= MARBLE_BAG_PYTLIK_DESIGN.x + MARBLE_BAG_PYTLIK_DESIGN.w + pad &&
+    p.y <= MARBLE_BAG_PYTLIK_DESIGN.y + MARBLE_BAG_PYTLIK_DESIGN.h + pad
+  );
+}
+
+function marbleBagDeleteChipWorld(example: MarbleBagExampleObject, item: MarbleBagItem & { kind: 'marble' }) {
+  const { scale, sx, gy } = marbleBagExampleGeometry(example);
+  const p = marbleBagMarbleLayoutPosition(example, item);
+  const mr = 34 * scale;
+  return { x: sx(p.x) + mr * 0.75, y: gy(p.y) - mr * 0.75 };
+}
+
+function marbleBagDeleteChipHit(
+  example: MarbleBagExampleObject,
+  item: MarbleBagItem & { kind: 'marble' },
+  world: Point,
+  viewportScale: number,
+) {
+  const c = marbleBagDeleteChipWorld(example, item);
+  const r = MARBLE_BAG_DELETE_CHIP_HIT_RADIUS_PX / viewportScale;
+  return distance(world, c) <= r;
+}
+
 function sequenceChoiceByKey(example: SequenceExample, key: string) {
   return example.choices.find((choice) => choice.key === key) ?? null;
 }
@@ -1870,6 +2016,20 @@ function glyphOverlapsAnswerRect(glyph: MathGlyphObject, rect: AnswerZoneRect) {
   );
 }
 
+function mathGlyphOverlapsMarbleBagAnswerZone(glyph: MathGlyphObject, example: MarbleBagExampleObject) {
+  return glyphOverlapsAnswerRect(glyph, marbleBagAnswerRect(example));
+}
+
+function marbleBagGlyphDigitsText(example: MarbleBagExampleObject, objects: BoardObject[]): string | null {
+  const rect = marbleBagAnswerRect(example);
+  const glyphs = objects
+    .filter((object): object is MathGlyphObject => object.kind === 'mathGlyph')
+    .filter((glyph) => glyphOverlapsAnswerRect(glyph, rect))
+    .sort((a, b) => mathGlyphCenter(a).x - mathGlyphCenter(b).x);
+  const text = normalizeArithmeticAnswerText(glyphs.map((glyph) => glyph.label).join(''));
+  return text.length > 0 ? text : null;
+}
+
 function dominoInputRects(example: DominoExampleObject): AnswerZoneRect[] {
   const ox = example.x;
   const oy = example.y;
@@ -1920,7 +2080,11 @@ function dominoExampleStatus(
   return answer?.correct ? 'submitted-correct' : 'submitted-incorrect';
 }
 
-function marbleBagAnswerValue(example: MarbleBagExampleObject) {
+function marbleBagAnswerValue(example: MarbleBagExampleObject, objects: BoardObject[]) {
+  const glyphText = marbleBagGlyphDigitsText(example, objects);
+  if (glyphText !== null && /^\d+$/.test(glyphText)) {
+    return Number(glyphText);
+  }
   if (example.example.answerMode === 'number') {
     const labels = example.items
       .filter((item) => item.kind === 'number' && item.label)
@@ -1932,9 +2096,9 @@ function marbleBagAnswerValue(example: MarbleBagExampleObject) {
   return example.items.filter((item) => item.kind === 'marble').length;
 }
 
-function marbleBagExampleStatus(example: MarbleBagExampleObject): ArithmeticExampleStatus {
+function marbleBagExampleStatus(example: MarbleBagExampleObject, objects: BoardObject[]): ArithmeticExampleStatus {
   if (!example.submitted) return 'pending';
-  return marbleBagAnswerValue(example) === example.example.expectedInBag ? 'submitted-correct' : 'submitted-incorrect';
+  return marbleBagAnswerValue(example, objects) === example.example.expectedInBag ? 'submitted-correct' : 'submitted-incorrect';
 }
 
 function calculateTaskScore(objects: BoardObject[], assignmentId: string | null): BoardTaskScore {
@@ -1982,7 +2146,7 @@ function calculateTaskScore(objects: BoardObject[], assignmentId: string | null)
     }
 
     if (object.kind === 'marbleBagExample') {
-      const answer = marbleBagAnswerValue(object);
+      const answer = marbleBagAnswerValue(object, objects);
       return {
         exampleId: object.id,
         index: object.example.index,
@@ -3625,28 +3789,29 @@ function ArithmeticExampleSvg({
 function MarbleBagExampleSvg({
   object,
   selected,
+  allObjects,
+  dropTarget,
+  focusedMarbleItemId,
 }: {
   object: MarbleBagExampleObject;
   selected: boolean;
+  allObjects: BoardObject[];
+  dropTarget: boolean;
+  focusedMarbleItemId: string | null;
 }) {
-  const status = marbleBagExampleStatus(object);
+  const status = marbleBagExampleStatus(object, allObjects);
   const ex = object.example;
-  const ox = object.x;
-  const oy = object.y;
-  const s = object.width / 1200;
-  const sy = object.height / 800;
-  const scale = Math.min(s, sy);
-  const left = ox + (object.width - 1200 * scale) / 2;
-  const top = oy + (object.height - 800 * scale) / 2;
-  const sx = (value: number) => left + value * scale;
-  const gy = (value: number) => top + value * scale;
+  const { scale, sx, gy } = marbleBagExampleGeometry(object);
   const sw = (value: number) => value * scale;
-  const sub = { x: sx(930), y: gy(718) };
+  const answerRect = marbleBagAnswerRect(object);
+  const sub = marbleBagSubmitButtonCenter(object);
+  const shadowFilterId = `marble-bag-task-shadow-${object.id}`;
+  const softFilterId = `marble-bag-task-soft-${object.id}`;
+
   const titleY = gy(62);
   const table = { x: sx(190), y: gy(210), width: sw(820), height: sw(388), radius: sw(26) };
   const bag = { x: sx(450), y: gy(40), width: sw(576), height: sw(384) };
   const titleBallX = sx(600 + Math.min(ex.total, 12) * 20);
-  const answerValue = marbleBagAnswerValue(object);
   const tablePositions = [
     { x: 250, y: 280 },
     { x: 350, y: 365 },
@@ -3658,30 +3823,45 @@ function MarbleBagExampleSvg({
     { x: 290, y: 395 },
     { x: 520, y: 500 },
   ];
+
+  const titleBallLeft = ex.totalDisplayMode === 'number' ? sx(600) : titleBallX;
+  const titleBallTop = gy(20);
+  const titleMarbleMr = 34 * scale;
+
+  const glyphDigits = marbleBagGlyphDigitsText(object, allObjects);
+  const glyphNormalized =
+    glyphDigits !== null ? normalizeArithmeticAnswerText(glyphDigits) : '';
+  const hasGlyphAnswer = glyphNormalized.length > 0 && /^\d+$/.test(glyphNormalized);
+  const numberLabels = object.items
+    .filter((item) => item.kind === 'number' && item.label)
+    .map((item) => item.label)
+    .join('');
+  const hasNumberItems = ex.answerMode === 'number' && /^\d+$/.test(numberLabels);
+  const marbleN = object.items.filter((item) => item.kind === 'marble').length;
+  let answerZoneDisplay: string | null = null;
+  if (hasGlyphAnswer) {
+    answerZoneDisplay = glyphNormalized;
+  } else if (hasNumberItems) {
+    answerZoneDisplay = numberLabels;
+  } else if (marbleN > 0) {
+    answerZoneDisplay = String(marbleN);
+  }
   return (
     <g
-      className={`arithmetic-example-block arithmetic-example-card marble-bag-example-card arithmetic-example-card--${status}${
+      className={`arithmetic-example-block marble-bag-example-block arithmetic-example-card--${status}${
         selected ? ' is-active' : ''
       }`}
     >
       <defs>
-        <filter id={`marble-bag-task-shadow-${object.id}`} x="-10%" y="-18%" width="120%" height="140%">
+        <filter id={shadowFilterId} x="-10%" y="-18%" width="120%" height="140%">
           <feDropShadow dx={0} dy={14 * scale} stdDeviation={15 * scale} floodColor="#4b321f" floodOpacity={0.24} />
         </filter>
-        <filter id={`marble-bag-task-soft-${object.id}`} x="-60%" y="-60%" width="220%" height="220%">
+        <filter id={softFilterId} x="-60%" y="-60%" width="220%" height="220%">
           <feDropShadow dx={0} dy={4 * scale} stdDeviation={3 * scale} floodColor="#3b2818" floodOpacity={0.2} />
         </filter>
       </defs>
-      <rect
-        className="arithmetic-example-card-bg"
-        x={ox}
-        y={oy}
-        width={object.width}
-        height={object.height}
-        rx={0}
-        fill="#fff8cd"
-      />
       <text
+        className="marble-bag-example-title"
         x={sx(520)}
         y={titleY}
         fill="#03036a"
@@ -3691,27 +3871,28 @@ function MarbleBagExampleSvg({
         dominantBaseline="middle"
         style={{ userSelect: 'none', pointerEvents: 'none' }}
       >
-        MÁM
+        {ex.totalDisplayMode === 'number' ? `MÁM ${ex.total}` : 'MÁM'}
       </text>
-      <g pointerEvents="none">
-        {Array.from({ length: ex.total }).map((_, index) => (
-          <path
-            key={index}
-            d={`M ${sx(542 + index * 19)} ${gy(14)} Q ${sx(552 + index * 19)} ${gy(52)} ${sx(542 + index * 19)} ${gy(91)}`}
-            stroke="#03036a"
-            strokeWidth={3.9 * scale}
-            strokeLinecap="round"
-            fill="none"
-          />
-        ))}
-      </g>
-      <image
-        href={MARBLE_BAG_BALL_URL}
-        x={titleBallX}
-        y={gy(20)}
-        width={72 * scale}
-        height={72 * scale}
-        preserveAspectRatio="xMidYMid meet"
+      {ex.totalDisplayMode === 'lines' ? (
+        <g pointerEvents="none">
+          {Array.from({ length: ex.total }).map((_, index) => (
+            <path
+              key={index}
+              d={`M ${sx(542 + index * 19)} ${gy(14)} Q ${sx(552 + index * 19)} ${gy(52)} ${sx(542 + index * 19)} ${gy(91)}`}
+              stroke="#03036a"
+              strokeWidth={3.9 * scale}
+              strokeLinecap="round"
+              fill="none"
+            />
+          ))}
+        </g>
+      ) : null}
+      <MarbleBagTaskMarbleDisc
+        cx={titleBallLeft + 36 * scale}
+        cy={titleBallTop + 36 * scale}
+        mr={titleMarbleMr}
+        color={MARBLE_BAG_STOCK_MARBLE_COLOR}
+        scale={scale}
       />
 
       <rect
@@ -3722,7 +3903,7 @@ function MarbleBagExampleSvg({
         rx={table.radius}
         fill="#755838"
         opacity={0.9}
-        filter={`url(#marble-bag-task-shadow-${object.id})`}
+        filter={`url(#${shadowFilterId})`}
       />
       <rect
         x={table.x}
@@ -3731,80 +3912,132 @@ function MarbleBagExampleSvg({
         height={table.height}
         rx={table.radius}
         fill="#fff8ef"
-        filter={`url(#marble-bag-task-shadow-${object.id})`}
+        filter={`url(#${shadowFilterId})`}
       />
-      <image
-        href={MARBLE_BAG_YELLOW_URL}
+      <MarbleBagYellowTaskSvg
         x={bag.x}
         y={bag.y}
         width={bag.width}
         height={bag.height}
-        preserveAspectRatio="xMidYMid meet"
+        dropTarget={dropTarget}
       />
       <g pointerEvents="none">
         {Array.from({ length: ex.onTable }, (_, index) => {
           const p = tablePositions[index % tablePositions.length];
           const row = Math.floor(index / tablePositions.length);
+          const left = sx(p.x + row * 28);
+          const top = gy(p.y + row * 18);
+          const mr = 27 * scale;
           return (
-            <image
+            <MarbleBagTaskMarbleDisc
               key={index}
-              href={MARBLE_BAG_BALL_URL}
-              x={sx(p.x + row * 28)}
-              y={gy(p.y + row * 18)}
-              width={60 * scale}
-              height={60 * scale}
-              preserveAspectRatio="xMidYMid meet"
-              filter={`url(#marble-bag-task-soft-${object.id})`}
+              cx={left + 30 * scale}
+              cy={top + 30 * scale}
+              mr={mr}
+              color={MARBLE_BAG_STOCK_MARBLE_COLOR}
+              scale={scale}
             />
           );
         })}
       </g>
-      <rect
-        className="arithmetic-example-answer-zone"
-        x={sx(662)}
-        y={gy(640)}
-        width={ex.answerMode === 'number' ? 218 * scale : 268 * scale}
-        height={152 * scale}
-        rx={17 * scale}
-      />
+      <g pointerEvents="none">
+        {object.items
+          .filter((item): item is Extract<MarbleBagItem, { kind: 'marble' }> => item.kind === 'marble')
+          .map((item) => {
+            const p = marbleBagMarbleLayoutPosition(object, item);
+            const mr = 34 * scale;
+            const delX = sx(p.x) + mr * 0.75;
+            const delY = gy(p.y) - mr * 0.75;
+            return (
+              <g key={item.id}>
+                <MarbleBagTaskMarbleDisc
+                  cx={sx(p.x)}
+                  cy={gy(p.y)}
+                  mr={mr}
+                  color={item.color}
+                  scale={scale}
+                />
+                {focusedMarbleItemId === item.id ? (
+                  <g className="marble-bag-marble-delete-chip" pointerEvents="none" aria-hidden>
+                    <circle
+                      cx={delX}
+                      cy={delY}
+                      r={MARBLE_BAG_DELETE_CHIP_CIRCLE_R * scale}
+                      fill="white"
+                      stroke="#4f46e5"
+                      strokeWidth={2.2 * scale}
+                    />
+                    <text
+                      x={delX}
+                      y={delY + 1.2 * scale}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fill="#312e81"
+                      fontSize={MARBLE_BAG_DELETE_CHIP_FONT * scale}
+                      fontWeight={800}
+                    >
+                      ×
+                    </text>
+                  </g>
+                ) : null}
+              </g>
+            );
+          })}
+      </g>
       <text
-        x={sx(622)}
-        y={gy(720)}
-        textAnchor="end"
+        className="marble-bag-example-label marble-bag-example-label--caps"
+        x={answerRect.x - 12 * scale}
+        y={answerRect.y + answerRect.height * 0.52}
         fill="#03036a"
-        fontSize={43 * scale}
+        fontSize={66 * scale}
         fontWeight={800}
+        textAnchor="end"
+        dominantBaseline="middle"
         style={{ userSelect: 'none', pointerEvents: 'none' }}
       >
         V PYTLÍKU JE:
       </text>
-      <text
-        x={sx(710)}
-        y={gy(725)}
-        textAnchor="start"
-        fill="#03036a"
-        fontSize={91 * scale}
-        fontWeight={900}
-        style={{ userSelect: 'none', pointerEvents: 'none' }}
-      >
-        {answerValue ?? ''}
-      </text>
-      <g pointerEvents="none">
-        <rect x={sx(810)} y={gy(655)} width={63 * scale} height={58 * scale} rx={3 * scale} fill="#e3efff" />
-        <text x={sx(842)} y={gy(694)} fill="#03036a" fontSize={30 * scale} fontWeight={900} textAnchor="middle">
-          ▲
+      <rect
+        className="arithmetic-example-answer-zone"
+        x={answerRect.x}
+        y={answerRect.y}
+        width={answerRect.width}
+        height={answerRect.height}
+        rx={12 * scale}
+      />
+      {answerZoneDisplay !== null && !hasGlyphAnswer ? (
+        <text
+          className="marble-bag-example-zone-value"
+          x={answerRect.x + answerRect.width / 2}
+          y={answerRect.y + answerRect.height * 0.62}
+          fill="#1e1b4b"
+          fontSize={54 * scale}
+          fontWeight={800}
+          textAnchor="middle"
+          dominantBaseline="middle"
+          style={{ userSelect: 'none', pointerEvents: 'none' }}
+        >
+          {answerZoneDisplay}
         </text>
-        <rect x={sx(810)} y={gy(714)} width={63 * scale} height={58 * scale} rx={3 * scale} fill="#e3efff" opacity={0.72} />
-        <text x={sx(842)} y={gy(752)} fill="#7e84ca" fontSize={30 * scale} fontWeight={900} textAnchor="middle">
-          ▼
-        </text>
-      </g>
+      ) : null}
       <circle className="arithmetic-example-submit-circle" cx={sub.x} cy={sub.y} r={ARITHMETIC_SUBMIT_R} />
-      <text className="arithmetic-example-submit-check" x={sub.x} y={sub.y + 1} dominantBaseline="middle" textAnchor="middle">
+      <text
+        className="arithmetic-example-submit-check marble-bag-example-submit-check"
+        x={sub.x}
+        y={sub.y + 1}
+        dominantBaseline="middle"
+        textAnchor="middle"
+      >
         ✓
       </text>
       {object.submitted ? (
-        <text className="arithmetic-example-status" x={object.x + object.width / 2} y={object.y - 14} dominantBaseline="middle" textAnchor="middle">
+        <text
+          className="arithmetic-example-status marble-bag-example-status"
+          x={object.x + object.width / 2}
+          y={object.y - 14}
+          dominantBaseline="middle"
+          textAnchor="middle"
+        >
           {status === 'submitted-correct' ? 'správně' : 'zkus znovu'}
         </text>
       ) : null}
@@ -4606,6 +4839,15 @@ export function FreeformBoard() {
     label: string;
     centerWorld: Point;
   } | null>(null);
+  /** Úloha pytlíček, nad jejímž žlutým pytlíkem je právě tažená kulička ze lišty. */
+  const [marbleBagDropTargetId, setMarbleBagDropTargetId] = useState<string | null>(null);
+  /** Poslední kulička v úloze pytlíček uchopená myší — pro Smazat / Backspace. */
+  const marbleBagHeldItemRef = useRef<{ exampleId: string; itemId: string } | null>(null);
+  /** Výběr kuličky v pytlíku — rámeček „×“ a zrušení výběru klikem mimo. */
+  const [marbleBagFocusedMarble, setMarbleBagFocusedMarble] = useState<{
+    exampleId: string;
+    itemId: string;
+  } | null>(null);
   const [libraryPanelMode, setLibraryPanelMode] = useState<ObjectLibraryPanelMode>('closed');
   const libraryPanelOpen = libraryPanelMode !== 'closed';
   const [librarySideRailOnlyLayout, setLibrarySideRailOnlyLayout] = useState(false);
@@ -4853,6 +5095,8 @@ export function FreeformBoard() {
     const onDragEndDoc = () => {
       setExternalTileDragOverlay(null);
       setExternalMathGlyphDragOverlay(null);
+      setSpatialTilingDropPreview(null);
+      setMarbleBagDropTargetId(null);
     };
     document.addEventListener('dragend', onDragEndDoc);
     return () => document.removeEventListener('dragend', onDragEndDoc);
@@ -5747,7 +5991,7 @@ export function FreeformBoard() {
       setActiveAssignmentId(assignmentId);
       setActiveExampleId(nextExamples[0].id);
       setActiveTaskSettings(settings);
-      setPinnedMathGlyphs(settings.answerMode === 'number');
+      setPinnedMathGlyphs(true);
       setLibraryDock('side');
       setTool('stamp');
       setLibraryPanelMode('tasks');
@@ -5935,7 +6179,7 @@ export function FreeformBoard() {
       setActiveAssignmentId(aid);
       setActiveExampleId(nextExamples[0].id);
       setActiveTaskSettings(settings);
-      setPinnedMathGlyphs(settings.answerMode === 'number');
+      setPinnedMathGlyphs(true);
       setLibraryDock('side');
       setTool('stamp');
       setLibraryPanelMode('tasks');
@@ -7871,31 +8115,61 @@ export function FreeformBoard() {
     [commitObjects, insertMathGlyph],
   );
 
+  const placeGlyphInMarbleBagAnswer = useCallback(
+    (example: MarbleBagExampleObject, label: string) => {
+      const existing = objectsRef.current
+        .filter((object): object is MathGlyphObject => object.kind === 'mathGlyph')
+        .filter((glyph) => mathGlyphOverlapsMarbleBagAnswerZone(glyph, example))
+        .sort((a, b) => mathGlyphCenter(a).x - mathGlyphCenter(b).x);
+
+      if (/^[0-9]$/.test(label) && existing.length > 0) {
+        const right = existing[existing.length - 1];
+        if (isMergeableNumberGlyph(right)) {
+          const newLabel = `${right.label}${label}`.slice(0, 8);
+          const updated = mathGlyphRelabelKeepingCenter(right, newLabel);
+          commitObjects(
+            objectsRef.current.map((object) => (object.id === right.id ? updated : object)),
+            [right.id],
+          );
+          return true;
+        }
+      }
+
+      const answerRect = marbleBagAnswerRect(example);
+      const r = MATH_GLYPH_R;
+      const { width } = mathGlyphPillDimensions(label, r);
+      const gap = 10;
+      const centerX =
+        existing.length > 0
+          ? Math.max(
+              answerRect.x + width / 2 + 8,
+              mathGlyphCenter(existing[existing.length - 1]).x + existing[existing.length - 1].r * 1.45 + gap,
+            )
+          : answerRect.x + answerRect.width / 2;
+      const center = {
+        x: Math.min(answerRect.x + answerRect.width - width / 2 + 10, centerX),
+        y: answerRect.y + answerRect.height / 2,
+      };
+      insertMathGlyph(label, center, {
+        keepTool: true,
+      });
+      return true;
+    },
+    [commitObjects, insertMathGlyph],
+  );
+
   const placeGlyphInActiveAnswer = useCallback(
     (label: string) => {
       if (!activeExample) return false;
       if (activeExample.kind === 'marbleBagExample') {
-        if (activeExample.example.answerMode !== 'number') return false;
-        commitObjects(
-          objectsRef.current.map((object) =>
-            object.kind === 'marbleBagExample' && object.id === activeExample.id
-              ? {
-                  ...object,
-                  submitted: false,
-                  items: [{ id: crypto.randomUUID(), kind: 'number', label }],
-                }
-              : object,
-          ),
-          [activeExample.id],
-        );
-        return true;
+        return placeGlyphInMarbleBagAnswer(activeExample, label);
       }
       if (activeExample.kind === 'dominoExample') {
         return placeGlyphInDominoAnswer(activeExample, label);
       }
       return placeGlyphInArithmeticAnswer(activeExample, label);
     },
-    [activeExample, commitObjects, placeGlyphInArithmeticAnswer, placeGlyphInDominoAnswer],
+    [activeExample, placeGlyphInArithmeticAnswer, placeGlyphInDominoAnswer, placeGlyphInMarbleBagAnswer],
   );
 
   const insertBuildNumberTile = useCallback(
@@ -8418,10 +8692,12 @@ export function FreeformBoard() {
       event.dataTransfer.dropEffect = 'copy';
 
       if (hasSequenceChoice) {
+        setMarbleBagDropTargetId(null);
         setExternalTileDragOverlay(null);
         setExternalMathGlyphDragOverlay(null);
         setSpatialTilingDropPreview(null);
       } else if (hasBuildTile) {
+        setMarbleBagDropTargetId(null);
         setSpatialTilingDropPreview(null);
         const payload = peekBuildTileDragPayload();
         if (payload) {
@@ -8459,6 +8735,7 @@ export function FreeformBoard() {
         }
         setExternalMathGlyphDragOverlay(null);
       } else if (hasMathGlyph) {
+        setMarbleBagDropTargetId(null);
         const glyphPayload = peekMathGlyphDragPayload();
         setExternalTileDragOverlay(null);
         setSpatialTilingDropPreview(null);
@@ -8476,6 +8753,7 @@ export function FreeformBoard() {
           setExternalMathGlyphDragOverlay(null);
         }
       } else if (hasSpatial) {
+        setMarbleBagDropTargetId(null);
         setExternalTileDragOverlay(null);
         setExternalMathGlyphDragOverlay(null);
         const payload = peekSpatialTilingDragPayload();
@@ -8498,10 +8776,22 @@ export function FreeformBoard() {
         const pattern = getTilePatternWithRotation(payload.shapeId, payload.rotation);
         const valid = canPlaceSpatialPattern(pattern, cell.cx, cell.cy, board.cols, board.rows, board.placedTiles);
         setSpatialTilingDropPreview({ boardId: board.id, gx: cell.cx, gy: cell.cy, pattern, valid });
+      } else if (hasMarbleBagItem) {
+        setExternalTileDragOverlay(null);
+        setExternalMathGlyphDragOverlay(null);
+        setSpatialTilingDropPreview(null);
+        const world = clientToWorld(event.clientX, event.clientY);
+        const target = [...objectsRef.current].reverse().find((object): object is MarbleBagExampleObject => {
+          if (object.kind !== 'marbleBagExample' || boardObjectIsLocked(object)) return false;
+          return worldPointOverMarbleBagYellowPytlik(object, world);
+        });
+        const nextId = target?.id ?? null;
+        setMarbleBagDropTargetId((prev) => (prev === nextId ? prev : nextId));
       } else {
         setExternalTileDragOverlay(null);
         setExternalMathGlyphDragOverlay(null);
         setSpatialTilingDropPreview(null);
+        setMarbleBagDropTargetId(null);
       }
     },
     [clientToWorld, viewport.scale, studentTaskMode],
@@ -8628,21 +8918,10 @@ export function FreeformBoard() {
               dropPoint.y <= object.y + object.height
             );
           });
-          if (taskBagHit && taskBagHit.example.answerMode === 'number') {
-            commitObjects(
-              objectsRef.current.map((object) =>
-                object.kind === 'marbleBagExample' && object.id === taskBagHit.id
-                  ? {
-                      ...object,
-                      submitted: false,
-                      items: [{ id: crypto.randomUUID(), kind: 'number', label: parsed.label }],
-                    }
-                  : object,
-              ),
-              [taskBagHit.id],
-            );
+          if (taskBagHit) {
             setActiveAssignmentId(taskBagHit.assignmentId);
             setActiveExampleId(taskBagHit.id);
+            placeGlyphInMarbleBagAnswer(taskBagHit, parsed.label);
             return;
           }
           if (addItemToMarbleBagAt(dropPoint, { kind: 'number', label: parsed.label })) return;
@@ -8696,7 +8975,8 @@ export function FreeformBoard() {
               dropPoint.y <= object.y + object.height
             );
           });
-          if (taskBagHit && taskBagHit.example.answerMode === 'marbles') {
+          if (taskBagHit) {
+            const { scale, sx, gy } = marbleBagExampleGeometry(taskBagHit);
             commitObjects(
               objectsRef.current.map((object) =>
                 object.kind === 'marbleBagExample' && object.id === taskBagHit.id
@@ -8709,6 +8989,8 @@ export function FreeformBoard() {
                           id: crypto.randomUUID(),
                           kind: 'marble',
                           color: typeof parsed.color === 'string' ? parsed.color : '#44b968',
+                          x: (dropPoint.x - sx(0)) / scale,
+                          y: (dropPoint.y - gy(0)) / scale,
                         },
                       ],
                     }
@@ -8793,6 +9075,7 @@ export function FreeformBoard() {
         setExternalTileDragOverlay(null);
         setExternalMathGlyphDragOverlay(null);
         setSpatialTilingDropPreview(null);
+        setMarbleBagDropTargetId(null);
       }
     },
     [
@@ -8807,6 +9090,7 @@ export function FreeformBoard() {
       insertSticker,
       addItemToMarbleBagAt,
       viewport.scale,
+      placeGlyphInMarbleBagAnswer,
     ],
   );
 
@@ -9029,6 +9313,35 @@ export function FreeformBoard() {
       flushActiveSplitAnimation();
       cancelViewportAnimation();
       const world = clientToWorld(event.clientX, event.clientY);
+      if (marbleBagFocusedMarble) {
+        const focusedEx = objectsRef.current.find(
+          (o): o is MarbleBagExampleObject =>
+            o.kind === 'marbleBagExample' && o.id === marbleBagFocusedMarble.exampleId,
+        );
+        const focusedItem = focusedEx?.items.find((i) => i.id === marbleBagFocusedMarble.itemId);
+        if (
+          focusedEx &&
+          focusedItem &&
+          focusedItem.kind === 'marble' &&
+          !boardObjectIsLocked(focusedEx) &&
+          marbleBagDeleteChipHit(focusedEx, focusedItem, world, viewport.scale)
+        ) {
+          event.preventDefault();
+          commitObjects(
+            objectsRef.current.map((o) =>
+              o.kind === 'marbleBagExample' && o.id === focusedEx.id
+                ? { ...o, submitted: false, items: o.items.filter((i) => i.id !== focusedItem.id) }
+                : o,
+            ),
+            selectedIdsRef.current,
+          );
+          setMarbleBagFocusedMarble(null);
+          marbleBagHeldItemRef.current = null;
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          return;
+        }
+      }
+      marbleBagHeldItemRef.current = null;
 
       if (middleButtonPan) {
         event.preventDefault();
@@ -9170,7 +9483,7 @@ export function FreeformBoard() {
 
       const marbleBagSubmitHit = [...objects].reverse().find((object): object is MarbleBagExampleObject => {
         if (object.kind !== 'marbleBagExample' || boardObjectIsLocked(object)) return false;
-        const center = arithmeticSubmitButtonCenter(object);
+        const center = marbleBagSubmitButtonCenter(object);
         return distance(world, center) <= submitCircleHitRadiusPx() / viewport.scale;
       });
       if (marbleBagSubmitHit) {
@@ -9215,6 +9528,33 @@ export function FreeformBoard() {
             [sequenceHit.id],
           );
           event.currentTarget.releasePointerCapture(event.pointerId);
+          return;
+        }
+      }
+      const marbleBagItemHit = [...objectsRef.current].reverse().find((object): object is MarbleBagExampleObject => {
+        if (object.kind !== 'marbleBagExample' || boardObjectIsLocked(object)) return false;
+        return marbleBagItemHitAt(object, world) !== null;
+      });
+      if (marbleBagItemHit) {
+        const item = marbleBagItemHitAt(marbleBagItemHit, world);
+        if (item) {
+          event.preventDefault();
+          setActiveAssignmentId(marbleBagItemHit.assignmentId);
+          setActiveExampleId(marbleBagItemHit.id);
+          setSelectedIds([]);
+          marbleBagHeldItemRef.current = { exampleId: marbleBagItemHit.id, itemId: item.id };
+          setMarbleBagFocusedMarble({ exampleId: marbleBagItemHit.id, itemId: item.id });
+          actionRef.current = {
+            type: 'marbleBagItemDrag',
+            exampleId: marbleBagItemHit.id,
+            itemId: item.id,
+            startWorld: world,
+            originalExample: {
+              ...marbleBagItemHit,
+              items: marbleBagItemHit.items.map((candidate) => ({ ...candidate })),
+            },
+            moved: false,
+          };
           return;
         }
       }
@@ -9621,6 +9961,7 @@ export function FreeformBoard() {
           setLibraryPanelMode('closed');
         }
         setSelectedIds([]);
+        setMarbleBagFocusedMarble(null);
         setLassoPoints([world]);
         actionRef.current = { type: 'lasso' };
         return;
@@ -9643,6 +9984,7 @@ export function FreeformBoard() {
           setTeacherTaskPanelLayout('configure');
           setLibraryPanelMode('closed');
         }
+        setMarbleBagFocusedMarble(null);
         event.currentTarget.releasePointerCapture(event.pointerId);
         return;
       }
@@ -9780,6 +10122,8 @@ export function FreeformBoard() {
       setSelectedIds,
       findCanvasFrameContainingObject,
       setLibraryPanelMode,
+      marbleBagFocusedMarble,
+      setMarbleBagFocusedMarble,
     ],
   );
 
@@ -10114,6 +10458,32 @@ export function FreeformBoard() {
         return;
       }
 
+      if (action.type === 'marbleBagItemDrag') {
+        const dxRaw = world.x - action.startWorld.x;
+        const dyRaw = world.y - action.startWorld.y;
+        if (Math.hypot(dxRaw, dyRaw) < 0.4 / viewport.scale) return;
+        actionRef.current = { ...action, moved: true };
+        const { scale } = marbleBagExampleGeometry(action.originalExample);
+        const dx = dxRaw / scale;
+        const dy = dyRaw / scale;
+        const nextObjects = objectsRef.current.map((object) => {
+          if (object.kind !== 'marbleBagExample' || object.id !== action.exampleId) return object;
+          return {
+            ...action.originalExample,
+            submitted: false,
+            items: action.originalExample.items.map((item) => {
+              if (item.id !== action.itemId) return item;
+              if (item.kind !== 'marble') return item;
+              const p = marbleBagMarbleLayoutPosition(action.originalExample, item);
+              return { ...item, x: p.x + dx, y: p.y + dy };
+            }),
+          };
+        });
+        objectsRef.current = nextObjects;
+        setObjects(nextObjects);
+        return;
+      }
+
       if (action.type === 'beadDrag') {
         const targetPosition = action.originalCounter.beads.find((bead) => bead.id === action.beadId)?.position ?? 0;
         const nextCounter = moveBead(action.originalCounter, action.beadId, targetPosition + (world.x - action.startWorld.x));
@@ -10292,7 +10662,37 @@ export function FreeformBoard() {
     if (action.type === 'spatialTileDrag' && action.moved) {
       pushHistory(objectsRef.current);
     }
-  }, [commitObjects, lassoPoints, pushHistory, runBuildTileSplitAnimation]);
+
+    if (action.type === 'marbleBagItemDrag') {
+      const ex = objectsRef.current.find(
+        (o): o is MarbleBagExampleObject => o.id === action.exampleId && o.kind === 'marbleBagExample',
+      );
+      if (ex && !boardObjectIsLocked(ex)) {
+        const item = ex.items.find((i) => i.id === action.itemId);
+        if (item?.kind === 'marble') {
+          const p = marbleBagMarbleLayoutPosition(ex, item);
+          if (!isMarbleCenterInPytlikDesign(p)) {
+            commitObjects(
+              objectsRef.current.map((o) =>
+                o.kind === 'marbleBagExample' && o.id === action.exampleId
+                  ? { ...o, submitted: false, items: o.items.filter((i) => i.id !== action.itemId) }
+                  : o,
+              ),
+              selectedIdsRef.current,
+            );
+            setMarbleBagFocusedMarble((prev) =>
+              prev?.exampleId === action.exampleId && prev.itemId === action.itemId ? null : prev,
+            );
+            marbleBagHeldItemRef.current = null;
+            return;
+          }
+        }
+      }
+      if (action.moved) {
+        pushHistory(objectsRef.current);
+      }
+    }
+  }, [commitObjects, lassoPoints, pushHistory, runBuildTileSplitAnimation, setMarbleBagFocusedMarble]);
 
   const openStickyNoteEditor = useCallback(
     (noteId: string) => {
@@ -10437,6 +10837,37 @@ export function FreeformBoard() {
         target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable === true;
       if (isTyping) return;
 
+      if (
+        (event.key === 'Backspace' || event.key === 'Delete') &&
+        marbleBagFocusedMarble &&
+        !mod
+      ) {
+        const held = marbleBagFocusedMarble;
+        const ex = objectsRef.current.find(
+          (o): o is MarbleBagExampleObject => o.kind === 'marbleBagExample' && o.id === held.exampleId,
+        );
+        if (
+          ex &&
+          !boardObjectIsLocked(ex) &&
+          ex.items.some((i) => i.id === held.itemId && i.kind === 'marble')
+        ) {
+          event.preventDefault();
+          commitObjects(
+            objectsRef.current.map((o) =>
+              o.kind === 'marbleBagExample' && o.id === held.exampleId
+                ? { ...o, submitted: false, items: o.items.filter((i) => i.id !== held.itemId) }
+                : o,
+            ),
+            selectedIdsRef.current,
+          );
+          setMarbleBagFocusedMarble(null);
+          marbleBagHeldItemRef.current = null;
+          return;
+        }
+        setMarbleBagFocusedMarble(null);
+        marbleBagHeldItemRef.current = null;
+      }
+
       if (mod && event.key.toLowerCase() === 'a') {
         event.preventDefault();
         performSelectAllBoardObjects();
@@ -10570,6 +11001,7 @@ export function FreeformBoard() {
     cancelMathTypingFlow,
     clearPendingPinnedPlacement,
     closeMathInlineEdit,
+    commitObjects,
     deleteSelection,
     handleNewBoardDocument,
     performSave,
@@ -10581,6 +11013,8 @@ export function FreeformBoard() {
     taskModeActive,
     undo,
     setSpatialTilingPick,
+    marbleBagFocusedMarble,
+    setMarbleBagFocusedMarble,
   ]);
 
   const pinnedStripBoardSelection = useMemo((): PinnedStripBoardSelection | null => {
@@ -10657,7 +11091,6 @@ export function FreeformBoard() {
         onInsertDiceTray={insertDiceTray}
         onInsertDominoTile={insertDominoTile}
         onInsertSpatialTilingBoard={insertSpatialTilingBoard}
-        onInsertMarbleBag={insertMarbleBag}
         onCreateArithmeticAssignment={(settings) => {
           void upsertArithmeticAssignment(settings);
         }}
@@ -11174,7 +11607,15 @@ export function FreeformBoard() {
                       selected={activeExampleId === object.id}
                     />
                   ) : object.kind === 'marbleBagExample' ? (
-                    <MarbleBagExampleSvg object={object} selected={activeExampleId === object.id} />
+                    <MarbleBagExampleSvg
+                      object={object}
+                      selected={activeExampleId === object.id}
+                      allObjects={objects}
+                      dropTarget={marbleBagDropTargetId === object.id}
+                      focusedMarbleItemId={
+                        marbleBagFocusedMarble?.exampleId === object.id ? marbleBagFocusedMarble.itemId : null
+                      }
+                    />
                   ) : object.kind === 'sequenceExample' ? (
                     <SequenceExampleSvg object={object} selected={activeSequenceExample?.id === object.id} />
                   ) : object.kind === 'dominoTile' ? (

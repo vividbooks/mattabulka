@@ -10,9 +10,10 @@ import {
   type SpatialTilingBoardObject,
 } from '../lib/spatialTiling';
 
-/** Kolmo k okraji desky — dříve 10 px, o 80 % užší ⇒ 20 % tloušťky. */
-const SPATIAL_GRID_HANDLE_THICK = Math.round(10 * 0.2);
-const SPATIAL_GRID_HANDLE_RX = Math.max(1, SPATIAL_GRID_HANDLE_THICK / 2);
+/** Stejný průřez jako u číselné osy (`NumberLineSvg`: šířka/výška 10, rx 5). Délka podél okraje omezená — ne hubený proužek, ale kratší úchop. */
+const SPATIAL_GRID_HANDLE_CROSS = 10;
+const SPATIAL_GRID_HANDLE_RX = 5;
+const SPATIAL_GRID_HANDLE_MAX_LEN = 64;
 
 function fillForShape(shapeId: string) {
   return TILE_SHAPE_DEFINITIONS[shapeId]?.color ?? '#4CAF50';
@@ -293,10 +294,10 @@ export function SpatialTilingBoardSvg({
             onPointerDown={(event) => onGridResizeStart(event, board, 'cols')}
           >
             <rect
-              x={bx + bw + 3 + (10 - SPATIAL_GRID_HANDLE_THICK) / 2}
+              x={bx + bw + 3}
               y={by + bh * 0.25 - 4}
-              width={SPATIAL_GRID_HANDLE_THICK}
-              height={(bh + 16) / 2}
+              width={SPATIAL_GRID_HANDLE_CROSS}
+              height={Math.min((bh + 16) / 2, SPATIAL_GRID_HANDLE_MAX_LEN)}
               rx={SPATIAL_GRID_HANDLE_RX}
             />
           </g>
@@ -306,9 +307,9 @@ export function SpatialTilingBoardSvg({
           >
             <rect
               x={bx + bw * 0.25 - 4}
-              y={by + bh + 3 + (10 - SPATIAL_GRID_HANDLE_THICK) / 2}
-              width={(bw + 16) / 2}
-              height={SPATIAL_GRID_HANDLE_THICK}
+              y={by + bh + 3}
+              width={Math.min((bw + 16) / 2, SPATIAL_GRID_HANDLE_MAX_LEN)}
+              height={SPATIAL_GRID_HANDLE_CROSS}
               rx={SPATIAL_GRID_HANDLE_RX}
             />
           </g>

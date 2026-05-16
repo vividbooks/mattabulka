@@ -1,3 +1,5 @@
+import { kulickaSvgUrlForHex } from '../lib/countingGameMarbleAssets';
+
 export type MarbleBagItemView = {
   id: string;
   kind: 'marble' | 'number';
@@ -58,21 +60,22 @@ function BagItem({ item, index, count, width, height }: {
       </g>
     );
   }
+  const mr = 12;
+  const d = 2 * (mr + 1.1);
   return (
-    <circle
-      cx={p.x}
-      cy={p.y}
-      r={12}
-      fill={color}
-      stroke="#1e1b4b"
-      strokeWidth={1.4}
+    <image
+      href={kulickaSvgUrlForHex(color)}
+      x={p.x - d / 2}
+      y={p.y - d / 2}
+      width={d}
+      height={d}
+      preserveAspectRatio="xMidYMid meet"
       pointerEvents="none"
-      filter={`url(#marble-bag-item-shadow)`}
     />
   );
 }
 
-export function MarbleBagSvg({ bag, selected }: { bag: MarbleBagViewModel; selected: boolean }) {
+export function MarbleBagSvg({ bag }: { bag: MarbleBagViewModel; selected?: boolean }) {
   const accent = bag.accentColor ?? '#1e1b4b';
   const count = bag.items.length;
 
@@ -86,16 +89,6 @@ export function MarbleBagSvg({ bag, selected }: { bag: MarbleBagViewModel; selec
           <feDropShadow dx={0} dy={2} stdDeviation={1.5} floodColor="#1e1b4b" floodOpacity={0.18} />
         </filter>
       </defs>
-      <rect
-        x={0}
-        y={0}
-        width={bag.width}
-        height={bag.height}
-        rx={22}
-        fill="rgba(255, 251, 235, 0.42)"
-        stroke={selected ? accent : 'rgba(30, 27, 75, 0.22)'}
-        strokeWidth={selected ? 3 : 1.5}
-      />
       <image
         href={BAG_URL}
         x={bag.width * 0.18}

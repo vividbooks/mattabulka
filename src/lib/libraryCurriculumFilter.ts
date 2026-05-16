@@ -15,8 +15,7 @@ export type LibraryInteractiveCategoryId =
   | 'tiles'
   | 'mathGlyphs'
   | 'dominoTile'
-  | 'spatialTiling'
-  | 'marbleBag';
+  | 'spatialTiling';
 
 export const LIBRARY_GRADE_LABELS: readonly { grade: LibraryGrade; label: string }[] = [
   { grade: 1, label: '1. ročník' },
@@ -81,7 +80,6 @@ const ALL_INTERACTIVE: ReadonlySet<LibraryInteractiveCategoryId> = new Set([
   'mathGlyphs',
   'dominoTile',
   'spatialTiling',
-  'marbleBag',
 ]);
 
 /** TODO: podle grade + volume vraťte podmnožinu kategorií / interaktivek podle VAŠÍ tabulky dílů. */
